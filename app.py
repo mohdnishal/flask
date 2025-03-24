@@ -94,17 +94,22 @@ def predict():
             'Higher studies possible': data.get('HigherStudies', 'No')
         }])
 
-        predicted_college_index = xgb_model.predict(user_data)[0]
-        college_name = label_encoder.inverse_transform([predicted_college_index])[0]
+        # Get probabilities for each college
+        probabilities = xgb_model.predict_proba(user_data)[0]
 
-        return jsonify({'college': college_name})
+        # Get top 5 indices based on highest probabilities
+        top_5_indices = np.argsort(probabilities)[::-1][:5]
+        
+        # Get corresponding college names and their scores
+        top_5_colleges = [
+            {"college": label_encoder.inverse_transform([idx])[0], "confidence": round(probabilities[idx] * 100, 2)}
+            for idx in top_5_indices
+        ]
+
+        return jsonify({'top_5_colleges': top_5_colleges})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Run the Flask app
-# if __name__ == '__main__':
-#     app.run(debug=True, host='0.0.0.0', port=5000)
-# 
 if __name__ == '__main__':
     from waitress import serve
     serve(app, host='0.0.0.0', port=10000)
