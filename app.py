@@ -98,7 +98,11 @@ def encode_and_resample(X, y):
 def predict():
     try:
         data = request.get_json()
-        
+
+        # Check if encoders exist
+        if cat_imputer is None or cat_encoder is None:
+            return jsonify({"error": "Model is not initialized. Try again later."}), 500
+
         # Validate required fields
         required_fields = ['Country', 'Course', 'IELTS', 'Plustwo', 'Duration', 'Fees']
         for field in required_fields:
@@ -121,15 +125,20 @@ def predict():
             'Higher studies possible': data.get('HigherStudies', 'No')
         }])
 
-        # Encode categorical columns (use same encoding as training)
-        user_data[cat_cols] = cat_imputer.transform(user_data[cat_cols])
-        user_encoded = cat_encoder.transform(user_data[cat_cols])
+        # Transform categorical columns
+        try:
+            user_data[cat_cols] = cat_imputer.transform(user_data[cat_cols])
+            user_encoded = cat_encoder.transform(user_data[cat_cols])
+        except Exception as e:
+            return jsonify({'error': f'Error in encoding: {str(e)}'}), 500
+
+        # Convert to DataFrame
         user_encoded_df = pd.DataFrame(user_encoded, columns=cat_encoder.get_feature_names_out(cat_cols))
 
-        # Combine numeric & encoded categorical data
+        # Merge numerical and encoded data
         user_final = pd.concat([user_data[num_cols].reset_index(drop=True), user_encoded_df], axis=1)
 
-        # Ensure the feature order matches training data
+        # Ensure correct column order
         user_final = user_final.reindex(columns=X_train.columns, fill_value=0)
 
         # Predict probabilities
@@ -146,6 +155,7 @@ def predict():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 def main():
     global X_train
