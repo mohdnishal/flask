@@ -12,8 +12,8 @@ from sklearn.metrics import accuracy_score
 app = Flask(__name__)
 
 # Global variables
-xgb_model = XGBClassifier()
-label_encoder = LabelEncoder()
+xgb_model = None
+label_encoder = None
 cat_imputer = None
 cat_encoder = None
 X_train = None
@@ -94,14 +94,46 @@ def encode_and_resample(X, y):
 
     return X_resampled, y_resampled
 
+def initialize_model():
+    global xgb_model, X_train, cat_imputer, cat_encoder, label_encoder
+
+    try:
+        # Load data
+        data = pd.read_csv("data.csv")
+        
+        # Preprocess data
+        data = preprocess_data(data)
+        X, y = data[num_cols + cat_cols], data['College']
+        
+        # Encode and resample
+        X_resampled, y_resampled = encode_and_resample(X, y)
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled)
+        
+        # Fit the model
+        xgb_model = XGBClassifier()
+        xgb_model.fit(X_train, y_train)
+        
+        # Accuracy
+        y_pred = xgb_model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        print(f"✅ Model Initialized! Accuracy: {accuracy * 100:.2f}%")
+
+    except Exception as e:
+        print(f"❌ Error initializing model: {str(e)}")
+        xgb_model = None
+
+# Initialize the model on startup
+initialize_model()
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        data = request.get_json()
-
-        # Check if encoders exist
-        if cat_imputer is None or cat_encoder is None:
+        if xgb_model is None or cat_imputer is None or cat_encoder is None:
             return jsonify({"error": "Model is not initialized. Try again later."}), 500
+
+        data = request.get_json()
 
         # Validate required fields
         required_fields = ['Country', 'Course', 'IELTS', 'Plustwo', 'Duration', 'Fees']
@@ -126,11 +158,8 @@ def predict():
         }])
 
         # Transform categorical columns
-        try:
-            user_data[cat_cols] = cat_imputer.transform(user_data[cat_cols])
-            user_encoded = cat_encoder.transform(user_data[cat_cols])
-        except Exception as e:
-            return jsonify({'error': f'Error in encoding: {str(e)}'}), 500
+        user_data[cat_cols] = cat_imputer.transform(user_data[cat_cols])
+        user_encoded = cat_encoder.transform(user_data[cat_cols])
 
         # Convert to DataFrame
         user_encoded_df = pd.DataFrame(user_encoded, columns=cat_encoder.get_feature_names_out(cat_cols))
@@ -156,32 +185,5 @@ def predict():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-def main():
-    global X_train
-
-    # Load data
-    data = pd.read_csv("data.csv")
-    
-    # Preprocess data
-    data = preprocess_data(data)
-    X, y = data[num_cols + cat_cols], data['College']
-    
-    # Encode and resample
-    X_resampled, y_resampled = encode_and_resample(X, y)
-    
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled)
-    
-    # Fit the model
-    xgb_model.fit(X_train, y_train)
-    
-    # Accuracy
-    y_pred = xgb_model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f"Optimized Model Accuracy: {accuracy * 100:.2f}%")
-
 if __name__ == "__main__":
-    main()
     app.run(host="0.0.0.0", port=5000)
-
