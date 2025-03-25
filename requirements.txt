@@ -1,7 +1,7 @@
-flask
+Flask
 pandas
-scikit-learn
-gunicorn
-waitress
 numpy
+scikit-learn
+imbalanced-learn
 xgboost
+gunicorn
