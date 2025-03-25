@@ -11,7 +11,6 @@ from sklearn.metrics import accuracy_score
 
 app = Flask(__name__)
 
-# Load dataset
 data = pd.read_csv("data.csv")
 
 data = data.dropna(subset=['College'])
@@ -70,6 +69,7 @@ y_pred = xgb_model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 print(f"Model Accuracy: {accuracy * 100:.2f}%")
 
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
@@ -100,15 +100,17 @@ def predict():
         # Get top 5 indices based on highest probabilities
         top_5_indices = np.argsort(probabilities)[::-1][:5]
         
-        # Get corresponding college names and their scores
+        # Get corresponding college names and their scores, ensuring float conversion
         top_5_colleges = [
-            {"college": label_encoder.inverse_transform([idx])[0], "confidence": round(probabilities[idx] * 100, 2)}
+            {"college": label_encoder.inverse_transform([idx])[0], "confidence": float(round(probabilities[idx] * 100, 2))}
             for idx in top_5_indices
         ]
 
         return jsonify({'top_5_colleges': top_5_colleges})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     from waitress import serve
