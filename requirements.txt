@@ -4,3 +4,4 @@ scikit-learn
 gunicorn
 waitress
 numpy
+xgboost
