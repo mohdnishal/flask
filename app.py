@@ -136,7 +136,7 @@ def predict():
         data = request.get_json()
 
         # Validate required fields
-        required_fields = ['Country', 'Course', 'IELTS', 'Plustwo', 'Duration', 'Fees']
+        required_fields = ['Country', 'Course', 'IELTS', 'Plustwo', 'Fees']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'error': f'{field} is required'}), 400
@@ -150,7 +150,7 @@ def predict():
             'TOEFL(120)': float(data.get('TOEFL', 0)),
             'PTE(90)': float(data.get('PTE', 0)),
             'Fees per year': float(data['Fees']),
-            'Duration of course': float(data['Duration']),
+            #'Duration of course': float(data['Duration']),
             'Internship&placement': data.get('Internship', 'No'),
             'Partime job': data.get('Partime', 'No'),
             'Stayback': data.get('Stayback', 'No'),
