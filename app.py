@@ -9,6 +9,8 @@ from imblearn.over_sampling import SMOTE
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score
 
+
+# Initialize Flask app
 app = Flask(__name__)
 
 # Global variables
@@ -19,6 +21,7 @@ cat_encoder = None
 X_train = None
 cat_cols = None
 num_cols = None
+college_country_map = {}
 
 def parse_numeric_value(value):
     """Convert numeric values from various formats"""
@@ -55,7 +58,7 @@ def preprocess_data(data):
     
     # Filter colleges with enough samples
     y_counts = data['College'].value_counts()
-    valid_classes = y_counts[y_counts > 5].index  # Increased minimum sample count
+    valid_classes = y_counts[y_counts > 5].index
     data = data[data['College'].isin(valid_classes)]
     
     return data
@@ -63,29 +66,22 @@ def preprocess_data(data):
 def encode_and_resample(X, y):
     global cat_imputer, cat_encoder, label_encoder
 
-    # Handle missing values in numeric columns
     num_imputer = SimpleImputer(strategy="median")
     X[num_cols] = num_imputer.fit_transform(X[num_cols])
 
-    # Categorical variable imputation and encoding
     cat_imputer = SimpleImputer(strategy="most_frequent")
     cat_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-    
-    # Encode categorical variables
+
     cat_data = cat_imputer.fit_transform(X[cat_cols])
     X_encoded = cat_encoder.fit_transform(cat_data)
     X_encoded_df = pd.DataFrame(X_encoded, columns=cat_encoder.get_feature_names_out(cat_cols))
 
-    # Combine numerical and categorical features
     X_final = pd.concat([X[num_cols].reset_index(drop=True), X_encoded_df.reset_index(drop=True)], axis=1)
 
-    # Encode labels with continuous index
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 
-    # Stratified SMOTE
     smote = SMOTE(sampling_strategy='auto', random_state=42)
-    
     try:
         X_resampled, y_resampled = smote.fit_resample(X_final, y_encoded)
     except ValueError:
@@ -95,27 +91,25 @@ def encode_and_resample(X, y):
     return X_resampled, y_resampled
 
 def initialize_model():
-    global xgb_model, X_train, cat_imputer, cat_encoder, label_encoder
+    global xgb_model, X_train, cat_imputer, cat_encoder, label_encoder, college_country_map
 
     try:
-        # Load data
+        # Load and preprocess data
         data = pd.read_csv("data.csv")
-        
-        # Preprocess data
         data = preprocess_data(data)
+
+        # Store country mapping
+        college_country_map = dict(zip(data['College'], data['Country']))
+
         X, y = data[num_cols + cat_cols], data['College']
-        
-        # Encode and resample
         X_resampled, y_resampled = encode_and_resample(X, y)
-        
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled)
-        
-        # Fit the model
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_resampled, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled
+        )
+
         xgb_model = XGBClassifier()
         xgb_model.fit(X_train, y_train)
-        
-        # Accuracy
+
         y_pred = xgb_model.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)
         print(f"✅ Model Initialized! Accuracy: {accuracy * 100:.2f}%")
@@ -124,7 +118,7 @@ def initialize_model():
         print(f"❌ Error initializing model: {str(e)}")
         xgb_model = None
 
-# Initialize the model on startup
+# Initialize model at startup
 initialize_model()
 
 @app.route('/predict', methods=['POST'])
@@ -133,7 +127,10 @@ def predict():
         if xgb_model is None or cat_imputer is None or cat_encoder is None:
             return jsonify({"error": "Model is not initialized. Try again later."}), 500
 
+        # Parse input JSON
         data = request.get_json()
+
+        user_country = data.get('Country', '')
 
         # Validate required fields
         required_fields = ['Country', 'Course', 'IELTS', 'Plustwo', 'Fees']
@@ -141,8 +138,8 @@ def predict():
             if field not in data or not data[field]:
                 return jsonify({'error': f'{field} is required'}), 400
 
-        # Convert input to DataFrame
-        user_data = pd.DataFrame([{  
+
+        user_input_df = pd.DataFrame([{  
             'Country': data['Country'],
             'Course': data['Course'],
             'IELTS(9)': float(data['IELTS']),
@@ -150,37 +147,36 @@ def predict():
             'TOEFL(120)': float(data.get('TOEFL', 0)),
             'PTE(90)': float(data.get('PTE', 0)),
             'Fees per year': float(data['Fees']),
-            #'Duration of course': float(data['Duration']),
             'Internship&placement': data.get('Internship', 'No'),
             'Partime job': data.get('Partime', 'No'),
             'Stayback': data.get('Stayback', 'No'),
             'Higher studies possible': data.get('HigherStudies', 'No')
         }])
 
-        # Transform categorical columns
-        user_data[cat_cols] = cat_imputer.transform(user_data[cat_cols])
-        user_encoded = cat_encoder.transform(user_data[cat_cols])
-
-        # Convert to DataFrame
+        # Preprocess input
+        user_input_df[cat_cols] = cat_imputer.transform(user_input_df[cat_cols])
+        user_encoded = cat_encoder.transform(user_input_df[cat_cols])
         user_encoded_df = pd.DataFrame(user_encoded, columns=cat_encoder.get_feature_names_out(cat_cols))
-
-        # Merge numerical and encoded data
-        user_final = pd.concat([user_data[num_cols].reset_index(drop=True), user_encoded_df], axis=1)
-
-        # Ensure correct column order
+        user_final = pd.concat([user_input_df[num_cols].reset_index(drop=True), user_encoded_df], axis=1)
         user_final = user_final.reindex(columns=X_train.columns, fill_value=0)
 
-        # Predict probabilities
+        # Predict
         probabilities = xgb_model.predict_proba(user_final)[0]
+        college_names = label_encoder.inverse_transform(np.arange(len(probabilities)))
+        college_probs = list(zip(college_names, probabilities))
 
-        # Get top 5 colleges
-        top_5_indices = np.argsort(probabilities)[::-1][:5]
-        top_5_colleges = [
-            {"college": label_encoder.inverse_transform([idx])[0], "confidence": float(round(probabilities[idx] * 100, 2))}
-            for idx in top_5_indices
-        ]
+        # 🎯 Country priority filtering
+        filtered = [(college, prob) for college, prob in college_probs
+                    if college_country_map.get(college) == user_country]
 
-        return jsonify({'top_5_colleges': top_5_colleges})
+        # Fallback to global top 5 if no country-specific match
+        if not filtered:
+            filtered = college_probs
+
+        top_5 = sorted(filtered, key=lambda x: x[1], reverse=True)[:5]
+        top_5_response = [{"college": c, "confidence": float(round(p * 100, 2))} for c, p in top_5]
+
+        return jsonify({'top_5_colleges': top_5_response})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
