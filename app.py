@@ -173,7 +173,7 @@ def predict():
         if not filtered:
             filtered = college_probs
 
-        top_5 = sorted(filtered, key=lambda x: x[1], reverse=True)[:5]
+        top_5 = sorted(filtered, key=lambda x: x[1], reverse=True)[:3]
         top_5_response = [{"college": c, "confidence": float(round(p * 100, 2))} for c, p in top_5]
 
         return jsonify({'top_5_colleges': top_5_response})
