@@ -1,7 +1,8 @@
 Flask
+xgboost
+scikit-learn
 pandas
 numpy
-scikit-learn
-imbalanced-learn
-xgboost
-gunicorn
+joblib
+waitress
+
