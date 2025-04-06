@@ -67,7 +67,7 @@ def predict():
             filtered = ranked
         top_3 = [{"college": str(c), "confidence": float(round(p * 100, 2))} for c, p in filtered[:3]]
 
-        return jsonify({"top_3_colleges": top_3})
+        return jsonify({"top_5_colleges": top_3})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
