@@ -33,7 +33,12 @@ def parse_numeric(value):
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
+        print("Received data:", data)
+
+        if not data or "Country" not in data:
+            return jsonify({"error": "Missing 'Country' in request"}), 400
+
         user_country = data.get('Country')
 
         user_df = pd.DataFrame([{
